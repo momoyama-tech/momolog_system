@@ -94,21 +94,36 @@ export async function POST({ request }) {
 
 		const youtubeVideoId = response.data.id;
 		const youtubeUrl = `https://www.youtube.com/watch?v=${youtubeVideoId}`;
+		const thumbnails = response.data.snippet?.thumbnails || {};
+		const youtubeThumbnailUrl =
+			thumbnails.high?.url ||
+			thumbnails.medium?.url ||
+			thumbnails.default?.url ||
+			'';
 
 		console.log(`YouTube upload success: ${youtubeUrl}`);
 
-		// 7. 動画ドキュメントを更新
+		// 7. 団体情報を取得してdenormalize
+		const groupDoc = await adminDb.collection('groups').doc(video.groupId).get();
+		const groupData = groupDoc.exists ? groupDoc.data() : {};
+
+		// 8. 動画ドキュメントを更新
 		await adminDb.collection('videos').doc(videoId).update({
 			status: 'published',
 			youtubeVideoId,
 			youtubeUrl,
+			youtubeThumbnailUrl,
+			groupName: groupData.name || '',
+			youtubeChannelId: groupData.youtube?.channelId || '',
+			youtubeChannelTitle: groupData.youtube?.channelTitle || '',
 			youtubeUploadedAt: FieldValue.serverTimestamp()
 		});
 
 		return json({
 			success: true,
 			youtubeVideoId,
-			youtubeUrl
+			youtubeUrl,
+			youtubeThumbnailUrl
 		});
 	} catch (err) {
 		console.error('YouTube upload error:', err);

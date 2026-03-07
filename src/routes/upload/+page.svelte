@@ -55,9 +55,10 @@
 				progress = p;
 			});
 
-			// 2. Firestoreに動画ドキュメント作成
+			// 2. Firestoreに動画ドキュメント作成（団体名をdenormalize）
 			const videoId = await createVideo({
 				groupId: selectedGroupId,
+				groupName: selectedGroup.name,
 				uploadedBy: $user.uid,
 				title,
 				description,
@@ -68,7 +69,8 @@
 				status: 'pending',
 				storagePath,
 				storageUrl: downloadUrl,
-				youtubeUrl: ''
+				youtubeUrl: '',
+				youtubeThumbnailUrl: ''
 			});
 
 			// 3. YouTube投稿APIを呼び出し
