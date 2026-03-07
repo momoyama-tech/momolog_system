@@ -1,7 +1,7 @@
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
-import { FIREBASE_SERVICE_ACCOUNT_KEY } from '$env/static/private';
+import { env } from '$env/dynamic/private';
 
 let _adminApp;
 let _adminDb;
@@ -13,7 +13,7 @@ function getAdminApp() {
 		_adminApp = getApps()[0];
 		return _adminApp;
 	}
-	const serviceAccount = JSON.parse(FIREBASE_SERVICE_ACCOUNT_KEY);
+	const serviceAccount = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT_KEY);
 	_adminApp = initializeApp({
 		credential: cert(serviceAccount),
 		storageBucket: `${serviceAccount.project_id}.firebasestorage.app`
@@ -29,7 +29,7 @@ export function getAdminDb() {
 
 export function getAdminBucket() {
 	if (_adminStorage) return _adminStorage;
-	const serviceAccount = JSON.parse(FIREBASE_SERVICE_ACCOUNT_KEY);
+	const serviceAccount = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT_KEY);
 	const bucketName = `${serviceAccount.project_id}.firebasestorage.app`;
 	_adminStorage = getStorage(getAdminApp()).bucket(bucketName);
 	return _adminStorage;
