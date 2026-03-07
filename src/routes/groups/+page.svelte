@@ -1,20 +1,41 @@
 <script>
 	import { onMount } from 'svelte';
 	import { user } from '$lib/stores/auth.js';
-	import { getGroupsByUser } from '$lib/firebase/firestore.js';
+	import { getGroupsByUser, getAllGroups, joinGroup } from '$lib/firebase/firestore.js';
 
-	let groups = $state([]);
+	let myGroups = $state([]);
+	let availableGroups = $state([]);
 	let loading = $state(true);
+	let joining = $state('');
 
-	onMount(async () => {
+	async function loadGroups() {
 		if (!$user) return;
 		try {
-			groups = await getGroupsByUser($user.uid);
+			const [mine, all] = await Promise.all([
+				getGroupsByUser($user.uid),
+				getAllGroups()
+			]);
+			myGroups = mine;
+			const myIds = new Set(mine.map((g) => g.id));
+			availableGroups = all.filter((g) => !myIds.has(g.id));
 		} catch (err) {
 			console.error('Failed to load groups:', err);
 		}
 		loading = false;
-	});
+	}
+
+	async function handleJoin(groupId) {
+		joining = groupId;
+		try {
+			await joinGroup(groupId, $user.uid);
+			await loadGroups();
+		} catch (err) {
+			console.error('Failed to join group:', err);
+		}
+		joining = '';
+	}
+
+	onMount(loadGroups);
 </script>
 
 <div class="mx-auto max-w-2xl p-6">
@@ -34,46 +55,77 @@
 				class="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent"
 			></div>
 		</div>
-	{:else if groups.length === 0}
-		<div class="rounded-lg border border-gray-200 bg-white p-8 text-center">
-			<p class="text-gray-500">まだ団体がありません。</p>
-			<a href="/groups/new" class="mt-2 inline-block text-blue-600 hover:underline">
-				団体を作成する
-			</a>
-		</div>
 	{:else}
-		<div class="space-y-4">
-			{#each groups as group}
-				<a
-					href="/groups/{group.id}"
-					class="block rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition hover:shadow-md"
-				>
-					<div class="flex items-center justify-between">
-						<div>
-							<h2 class="text-lg font-semibold text-gray-800">{group.name}</h2>
-							{#if group.description}
-								<p class="mt-1 text-sm text-gray-500">{group.description}</p>
-							{/if}
+		<!-- 所属団体 -->
+		<section class="mb-8">
+			<h2 class="mb-3 text-lg font-semibold text-gray-700">所属団体</h2>
+			{#if myGroups.length === 0}
+				<div class="rounded-lg border border-gray-200 bg-white p-8 text-center">
+					<p class="text-gray-500">まだ団体に所属していません。</p>
+				</div>
+			{:else}
+				<div class="space-y-3">
+					{#each myGroups as group}
+						<a
+							href="/groups/{group.id}"
+							class="block rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition hover:shadow-md"
+						>
+							<div class="flex items-center justify-between">
+								<div>
+									<h3 class="text-lg font-semibold text-gray-800">{group.name}</h3>
+									{#if group.description}
+										<p class="mt-1 text-sm text-gray-500">{group.description}</p>
+									{/if}
+								</div>
+								<div class="flex items-center gap-2">
+									{#if group.youtube?.connected}
+										<span
+											class="rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-800"
+										>
+											YouTube連携済み
+										</span>
+									{:else}
+										<span
+											class="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600"
+										>
+											未連携
+										</span>
+									{/if}
+								</div>
+							</div>
+						</a>
+					{/each}
+				</div>
+			{/if}
+		</section>
+
+		<!-- 参加可能な団体 -->
+		{#if availableGroups.length > 0}
+			<section>
+				<h2 class="mb-3 text-lg font-semibold text-gray-700">参加可能な団体</h2>
+				<div class="space-y-3">
+					{#each availableGroups as group}
+						<div
+							class="flex items-center justify-between rounded-lg border border-dashed border-gray-300 bg-gray-50 p-5"
+						>
+							<div>
+								<h3 class="font-semibold text-gray-800">{group.name}</h3>
+								{#if group.description}
+									<p class="mt-1 text-sm text-gray-500">{group.description}</p>
+								{/if}
+							</div>
+							<button
+								onclick={() => handleJoin(group.id)}
+								disabled={joining === group.id}
+								class="shrink-0 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+							>
+								{joining === group.id ? '参加中...' : '参加する'}
+							</button>
 						</div>
-						<div class="flex items-center gap-2">
-							{#if group.youtube?.connected}
-								<span
-									class="rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-800"
-								>
-									YouTube連携済み
-								</span>
-							{:else}
-								<span
-									class="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600"
-								>
-									未連携
-								</span>
-							{/if}
-						</div>
-					</div>
-				</a>
-			{/each}
-		</div>
+					{/each}
+				</div>
+			</section>
+		{/if}
 	{/if}
 
 	<div class="mt-6">

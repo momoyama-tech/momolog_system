@@ -55,6 +55,15 @@ export async function getGroupsByUser(userId) {
 	return getGroupsByIds(userData.groupIds);
 }
 
+export async function getAllGroups() {
+	const snap = await getDocs(collection(db, 'groups'));
+	return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+export async function joinGroup(groupId, userId) {
+	await setDoc(doc(db, 'users', userId), { groupIds: arrayUnion(groupId) }, { merge: true });
+}
+
 // --- Videos ---
 
 export async function createVideo(videoData) {
