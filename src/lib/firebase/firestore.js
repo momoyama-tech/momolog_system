@@ -5,6 +5,8 @@ import {
 	getDocs,
 	setDoc,
 	updateDoc,
+	addDoc,
+	arrayUnion,
 	query,
 	where,
 	orderBy,
@@ -34,6 +36,23 @@ export async function getGroupsByIds(groupIds) {
 	if (!groupIds.length) return [];
 	const groups = await Promise.all(groupIds.map((id) => getGroup(id)));
 	return groups.filter(Boolean);
+}
+
+export async function createGroup(groupData, userId) {
+	const ref = await addDoc(collection(db, 'groups'), {
+		...groupData,
+		createdBy: userId,
+		createdAt: serverTimestamp()
+	});
+	// ユーザーのgroupIdsに追加
+	await setDoc(doc(db, 'users', userId), { groupIds: arrayUnion(ref.id) }, { merge: true });
+	return ref.id;
+}
+
+export async function getGroupsByUser(userId) {
+	const userData = await getUser(userId);
+	if (!userData?.groupIds?.length) return [];
+	return getGroupsByIds(userData.groupIds);
 }
 
 // --- Videos ---

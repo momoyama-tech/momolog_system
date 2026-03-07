@@ -12,8 +12,10 @@
 	let videoFile = $state(null);
 	let uploading = $state(false);
 	let progress = $state(0);
+	let uploadPhase = $state(''); // 'storage' | 'youtube'
 	let error = $state('');
 	let success = $state(false);
+	let youtubeUrl = $state('');
 
 	onMount(async () => {
 		if (!$user) return;
@@ -34,17 +36,27 @@
 			return;
 		}
 
+		// YouTube連携チェック
+		const selectedGroup = groups.find((g) => g.id === selectedGroupId);
+		if (!selectedGroup?.youtube?.connected) {
+			error = 'この団体はYouTube連携がされていません。団体管理ページで連携してください。';
+			return;
+		}
+
 		try {
 			error = '';
 			uploading = true;
 			progress = 0;
+			uploadPhase = 'storage';
 
-			const path = `videos/${$user.uid}/${Date.now()}_${videoFile.name}`;
-			const downloadUrl = await uploadVideo(videoFile, path, (p) => {
+			// 1. Firebase Storageにアップロード
+			const storagePath = `videos/${$user.uid}/${Date.now()}_${videoFile.name}`;
+			const downloadUrl = await uploadVideo(videoFile, storagePath, (p) => {
 				progress = p;
 			});
 
-			await createVideo({
+			// 2. Firestoreに動画ドキュメント作成
+			const videoId = await createVideo({
 				groupId: selectedGroupId,
 				uploadedBy: $user.uid,
 				title,
@@ -54,15 +66,34 @@
 					.map((t) => t.trim())
 					.filter(Boolean),
 				status: 'pending',
+				storagePath,
 				storageUrl: downloadUrl,
 				youtubeUrl: ''
 			});
 
+			// 3. YouTube投稿APIを呼び出し
+			uploadPhase = 'youtube';
+			progress = 0;
+
+			const response = await fetch('/api/youtube/upload', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ videoId })
+			});
+
+			const result = await response.json();
+
+			if (!response.ok) {
+				throw new Error(result.details || result.error || 'YouTube投稿に失敗しました');
+			}
+
+			youtubeUrl = result.youtubeUrl;
 			success = true;
 		} catch (e) {
 			error = e.message;
 		} finally {
 			uploading = false;
+			uploadPhase = '';
 		}
 	}
 </script>
@@ -72,8 +103,23 @@
 
 	{#if success}
 		<div class="rounded-lg bg-green-50 p-6 text-center">
-			<p class="text-lg font-medium text-green-800">アップロードが完了しました</p>
-			<a href="/status" class="mt-4 inline-block text-blue-600 underline">投稿ステータスを確認</a>
+			<p class="text-lg font-medium text-green-800">YouTubeへの投稿が完了しました（非公開）</p>
+			{#if youtubeUrl}
+				<a
+					href={youtubeUrl}
+					target="_blank"
+					rel="noopener noreferrer"
+					class="mt-3 inline-block text-blue-600 underline"
+				>
+					YouTubeで確認する
+				</a>
+			{/if}
+			<div class="mt-4 flex justify-center gap-4">
+				<a href="/status" class="text-blue-600 underline">投稿ステータス一覧</a>
+				<a href="/upload" class="text-blue-600 underline" onclick={() => { success = false; youtubeUrl = ''; }}>
+					続けてアップロード
+				</a>
+			</div>
 		</div>
 	{:else}
 		<form onsubmit={(e) => { e.preventDefault(); handleSubmit(); }} class="space-y-6">
@@ -141,10 +187,19 @@
 
 			{#if uploading}
 				<div class="space-y-2">
-					<div class="h-2 w-full rounded-full bg-gray-200">
-						<div class="h-2 rounded-full bg-blue-600" style="width: {progress}%"></div>
-					</div>
-					<p class="text-sm text-gray-500">アップロード中... {Math.round(progress)}%</p>
+					{#if uploadPhase === 'storage'}
+						<div class="h-2 w-full rounded-full bg-gray-200">
+							<div class="h-2 rounded-full bg-blue-600 transition-all" style="width: {progress}%"></div>
+						</div>
+						<p class="text-sm text-gray-500">
+							Storageにアップロード中... {Math.round(progress)}%
+						</p>
+					{:else if uploadPhase === 'youtube'}
+						<div class="flex items-center gap-2">
+							<div class="h-5 w-5 animate-spin rounded-full border-2 border-red-600 border-t-transparent"></div>
+							<p class="text-sm text-gray-500">YouTubeに投稿中...（しばらくお待ちください）</p>
+						</div>
+					{/if}
 				</div>
 			{/if}
 
@@ -153,7 +208,11 @@
 				disabled={uploading}
 				class="w-full rounded-lg bg-blue-600 px-4 py-3 text-white shadow hover:bg-blue-700 disabled:opacity-50"
 			>
-				{uploading ? 'アップロード中...' : 'アップロード'}
+				{#if uploading}
+					{uploadPhase === 'storage' ? 'Storageにアップロード中...' : 'YouTubeに投稿中...'}
+				{:else}
+					アップロード
+				{/if}
 			</button>
 		</form>
 	{/if}

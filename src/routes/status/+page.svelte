@@ -8,14 +8,18 @@
 	let loadingVideos = $state(true);
 
 	const statusLabels = {
-		pending: '処理中',
-		published: '公開済み',
+		pending: '待機中',
+		uploading_to_youtube: 'YouTube投稿中',
+		published: '投稿完了',
+		failed: '投稿失敗',
 		rejected: '却下'
 	};
 
 	const statusColors = {
 		pending: 'bg-yellow-100 text-yellow-800',
+		uploading_to_youtube: 'bg-blue-100 text-blue-800',
 		published: 'bg-green-100 text-green-800',
+		failed: 'bg-red-100 text-red-800',
 		rejected: 'bg-red-100 text-red-800'
 	};
 
@@ -56,8 +60,11 @@
 							{/if}
 						</div>
 						<span
-							class="rounded-full px-3 py-1 text-xs font-medium {statusColors[video.status] || 'bg-gray-100 text-gray-800'}"
+							class="shrink-0 rounded-full px-3 py-1 text-xs font-medium {statusColors[video.status] || 'bg-gray-100 text-gray-800'}"
 						>
+							{#if video.status === 'uploading_to_youtube'}
+								<span class="mr-1 inline-block h-2 w-2 animate-pulse rounded-full bg-blue-500"></span>
+							{/if}
 							{statusLabels[video.status] || video.status}
 						</span>
 					</div>
@@ -70,6 +77,9 @@
 						>
 							YouTubeで見る
 						</a>
+					{/if}
+					{#if video.status === 'failed' && video.youtubeError}
+						<p class="mt-2 text-sm text-red-600">エラー: {video.youtubeError}</p>
 					{/if}
 				</div>
 			{/each}

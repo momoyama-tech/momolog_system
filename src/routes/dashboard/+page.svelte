@@ -46,7 +46,7 @@
 		{/if}
 	</section>
 
-	<div class="flex gap-4">
+	<div class="flex flex-wrap gap-4">
 		<a
 			href="/upload"
 			class="rounded-lg bg-blue-600 px-6 py-3 text-white shadow hover:bg-blue-700"
@@ -58,6 +58,12 @@
 			class="rounded-lg border border-gray-300 bg-white px-6 py-3 text-gray-700 shadow-sm hover:bg-gray-50"
 		>
 			投稿ステータス
+		</a>
+		<a
+			href="/groups"
+			class="rounded-lg border border-gray-300 bg-white px-6 py-3 text-gray-700 shadow-sm hover:bg-gray-50"
+		>
+			団体管理
 		</a>
 	</div>
 </div>
