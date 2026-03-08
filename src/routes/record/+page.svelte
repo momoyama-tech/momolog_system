@@ -284,60 +284,65 @@
 		</div>
 	{:else if !videoFile}
 		<!-- 撮影画面 -->
-		<div class="space-y-4">
-			{#if error}
-				<div class="rounded bg-red-50 p-3 text-sm text-red-600">{error}</div>
+		{#if error}
+			<div class="mb-4 rounded bg-red-50 p-3 text-sm text-red-600">{error}</div>
+		{/if}
+
+		<div class="relative overflow-hidden rounded-2xl bg-black">
+			<!-- カメラプレビュー -->
+			<video
+				bind:this={videoElement}
+				autoplay
+				muted
+				playsinline
+				class="aspect-video w-full object-cover"
+			></video>
+
+			<!-- 録画中の赤枠 -->
+			{#if isRecording}
+				<div class="pointer-events-none absolute inset-0 rounded-2xl ring-4 ring-inset ring-red-500"></div>
 			{/if}
 
-			<!-- カメラプレビュー -->
-			<div class="relative overflow-hidden rounded-2xl bg-black">
-				<video
-					bind:this={videoElement}
-					autoplay
-					muted
-					playsinline
-					class="aspect-video w-full object-cover {isRecording
-						? 'ring-4 ring-red-500 ring-inset rounded-2xl'
-						: ''}"
-				></video>
-
-				<!-- カメラ切り替えボタン（プレビュー右上） -->
-				{#if !isRecording}
-					<button
-						type="button"
-						onclick={switchCamera}
-						class="absolute right-3 top-3 rounded-full bg-black/50 p-2.5 text-white active:bg-black/70"
-					>
-						<svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-							></path>
-						</svg>
-					</button>
-				{/if}
-			</div>
-
-			<!-- 録画タイマー -->
+			<!-- 録画タイマー（上部中央オーバーレイ） -->
 			{#if isRecording}
-				<div class="flex items-center justify-center gap-2">
-					<span class="h-3 w-3 animate-pulse rounded-full bg-red-500"></span>
-					<span class="font-mono text-lg font-semibold text-red-600"
-						>REC {formatTime(recordingTime)}</span
-					>
+				<div class="absolute left-1/2 top-4 -translate-x-1/2">
+					<div class="flex items-center gap-2 rounded-full bg-black/60 px-4 py-1.5">
+						<span class="h-2.5 w-2.5 animate-pulse rounded-full bg-red-500"></span>
+						<span class="font-mono text-sm font-semibold text-white"
+							>REC {formatTime(recordingTime)}</span
+						>
+					</div>
 				</div>
 			{/if}
 
-			<!-- 録画コントロール -->
-			<div class="flex items-center justify-center gap-8 py-4">
+			<!-- カメラ切り替え（右上オーバーレイ） -->
+			{#if !isRecording}
+				<button
+					type="button"
+					onclick={switchCamera}
+					aria-label="カメラ切り替え"
+					class="absolute right-3 top-3 rounded-full bg-black/50 p-2.5 text-white active:bg-black/70"
+				>
+					<svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+						></path>
+					</svg>
+				</button>
+			{/if}
+
+			<!-- 録画コントロール（下部オーバーレイ） -->
+			<div class="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-8 bg-gradient-to-t from-black/50 to-transparent pb-5 pt-10">
 				<!-- カメラ切り替え -->
 				<button
 					type="button"
 					onclick={switchCamera}
 					disabled={isRecording}
-					class="flex h-12 w-12 items-center justify-center rounded-full bg-gray-200 text-gray-700 active:bg-gray-300 disabled:opacity-30"
+					aria-label="カメラ切り替え"
+					class="flex h-12 w-12 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm active:bg-white/30 disabled:opacity-30"
 				>
 					<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path
@@ -355,7 +360,7 @@
 						type="button"
 						onclick={stopRecording}
 						aria-label="録画停止"
-						class="flex h-20 w-20 items-center justify-center rounded-full border-4 border-white bg-red-100 shadow-lg active:scale-95"
+						class="flex h-20 w-20 items-center justify-center rounded-full border-4 border-white/80 bg-white/20 shadow-lg backdrop-blur-sm active:scale-95"
 					>
 						<span class="h-8 w-8 rounded-sm bg-red-600"></span>
 					</button>
@@ -364,7 +369,7 @@
 						type="button"
 						onclick={startRecording}
 						aria-label="録画開始"
-						class="flex h-20 w-20 items-center justify-center rounded-full border-4 border-white bg-red-100 shadow-lg active:scale-95"
+						class="flex h-20 w-20 items-center justify-center rounded-full border-4 border-white/80 bg-white/20 shadow-lg backdrop-blur-sm active:scale-95"
 					>
 						<span class="h-14 w-14 rounded-full bg-red-600"></span>
 					</button>
