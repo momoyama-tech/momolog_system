@@ -17,17 +17,86 @@
 	let success = $state(false);
 	let youtubeUrl = $state('');
 
+	// 録画関連
+	let videoElement;
+	let recorder;
+	let chunks = [];
+	let isRecording = $state(false);
+	let stream;
+
 	onMount(async () => {
 		if (!$user) return;
 		const userData = await getUser($user.uid);
 		if (userData?.groupIds?.length) {
 			groups = await getGroupsByIds(userData.groupIds);
 		}
+
+		// カメラアクセス
+		try {
+			stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+			if (videoElement) {
+				videoElement.srcObject = stream;
+			}
+		} catch (e) {
+			error = 'カメラ・マイクへのアクセスが許可されませんでした: ' + e.message;
+		}
 	});
 
 	function handleFileChange(e) {
 		const file = e.target.files?.[0];
 		if (file) videoFile = file;
+	}
+
+	async function startRecording() {
+		// ① 毎回撮影開始時にchunksをリセット（これだけで上書きになる）
+		chunks = [];
+
+		stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+		if (videoElement) {
+			videoElement.srcObject = stream;
+		}
+
+		const mimeType = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
+		recorder = new MediaRecorder(stream, { mimeType });
+
+		recorder.ondataavailable = (e) => chunks.push(e.data);
+
+		recorder.onstop = () => {
+			const ext = mimeType.split('/')[1];
+			const blob = new Blob(chunks, { type: mimeType });
+			const file = new File([blob], `recorded_${Date.now()}.${ext}`, { type: mimeType });
+
+			// プレビュー切り替え
+			if (videoElement) {
+				videoElement.srcObject = null;
+				videoElement.src = URL.createObjectURL(blob);
+				videoElement.controls = true;
+			}
+
+			uploadToFirebase(file);
+		};
+
+		recorder.start(100);
+		isRecording = true;
+	}
+
+	function stopRecording() {
+		if (recorder && isRecording) {
+			recorder.stop();
+			stream.getTracks().forEach(track => track.stop()); // カメラを解放
+			isRecording = false;
+		}
+	}
+
+	// Firebase Storageへアップロード
+	async function uploadToFirebase(file) {
+		const storageRef = `videos/${$user.uid}/${file.name}`;
+		const downloadUrl = await uploadVideo(file, storageRef, (p) => {
+			progress = p;
+		});
+		console.log('アップロード完了:', downloadUrl);
+		// → YouTube APIへ渡す（ここではvideoFileにセット）
+		videoFile = file;
 	}
 
 	async function handleSubmit() {
@@ -127,8 +196,40 @@
 				<div class="rounded bg-red-50 p-3 text-sm text-red-600">{error}</div>
 			{/if}
 
+			<!-- カメラ録画セクション -->
+			<div class="rounded-lg border border-gray-200 p-4">
+				<h2 class="mb-4 text-lg font-semibold">カメラで録画</h2>
+				<video
+					bind:this={videoElement}
+					autoplay
+					muted
+					class="mb-4 w-full max-w-md rounded border"
+				></video>
+				<div class="flex space-x-2">
+					<button
+						type="button"
+						onclick={startRecording}
+						disabled={isRecording}
+						class="rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700 disabled:opacity-50"
+					>
+						{isRecording ? '録画中...' : '録画開始'}
+					</button>
+					<button
+						type="button"
+						onclick={stopRecording}
+						disabled={!isRecording}
+						class="rounded bg-gray-600 px-4 py-2 text-white hover:bg-gray-700 disabled:opacity-50"
+					>
+						録画停止
+					</button>
+				</div>
+			</div>
+
+			<!-- またはファイル選択 -->
+			<div class="text-center text-gray-500">または</div>
+
 			<div>
-				<label for="video" class="block text-sm font-medium text-gray-700">動画ファイル</label>
+				<label for="video" class="block text-sm font-medium text-gray-700">動画ファイルを選択</label>
 				<input
 					id="video"
 					type="file"
