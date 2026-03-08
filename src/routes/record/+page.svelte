@@ -7,6 +7,9 @@
 
 	const PROCESSOR_URL = env.PUBLIC_PROCESSOR_URL || '';
 
+	// step: 'theme' → 'record' → 'form'
+	let step = $state('theme');
+
 	let themes = $state([{ id: 'none', label: 'なし', description: 'そのまま投稿', type: 'none', mediaDuration: 0 }]);
 	let groups = $state([]);
 	let selectedGroupId = $state('');
@@ -31,6 +34,9 @@
 	let recordingTime = $state(0);
 	let recordingTimer;
 
+	let selectedThemeData = $derived(themes.find((t) => t.id === selectedTheme));
+	let targetDuration = $derived(selectedThemeData?.mediaDuration || 0);
+
 	onMount(async () => {
 		if (!$user) return;
 		const userData = await getUser($user.uid);
@@ -53,7 +59,9 @@
 		} catch (e) {
 			console.warn('Failed to load themes:', e);
 		}
+	});
 
+	async function initCamera() {
 		try {
 			stream = await navigator.mediaDevices.getUserMedia({
 				video: { facingMode },
@@ -65,7 +73,18 @@
 		} catch (e) {
 			error = 'カメラ・マイクへのアクセスが許可されませんでした: ' + e.message;
 		}
-	});
+	}
+
+	function goToRecord() {
+		step = 'record';
+		// カメラ初期化は videoElement が mount された後に行う
+		setTimeout(() => initCamera(), 100);
+	}
+
+	function goToTheme() {
+		step = 'theme';
+		if (stream) stream.getTracks().forEach((t) => t.stop());
+	}
 
 	async function switchCamera() {
 		if (isRecording) return;
@@ -129,6 +148,7 @@
 			}
 
 			videoFile = file;
+			step = 'form';
 		};
 
 		recorder.start(100);
@@ -149,20 +169,23 @@
 
 	function retakeVideo() {
 		videoFile = null;
-		if (videoElement) {
-			videoElement.src = '';
-			videoElement.controls = false;
-		}
+		step = 'record';
 		recordingTime = 0;
-		navigator.mediaDevices
-			.getUserMedia({ video: { facingMode }, audio: true })
-			.then((s) => {
-				stream = s;
-				if (videoElement) videoElement.srcObject = stream;
-			})
-			.catch((e) => {
-				error = 'カメラの再起動に失敗しました: ' + e.message;
-			});
+		setTimeout(() => {
+			if (videoElement) {
+				videoElement.src = '';
+				videoElement.controls = false;
+			}
+			navigator.mediaDevices
+				.getUserMedia({ video: { facingMode }, audio: true })
+				.then((s) => {
+					stream = s;
+					if (videoElement) videoElement.srcObject = stream;
+				})
+				.catch((e) => {
+					error = 'カメラの再起動に失敗しました: ' + e.message;
+				});
+		}, 100);
 	}
 
 	async function readStreamAsNDJSON(response) {
@@ -303,6 +326,7 @@
 
 <div class="mx-auto max-w-2xl p-4 sm:p-6">
 	{#if success}
+		<!-- 完了画面 -->
 		<div class="rounded-lg bg-green-50 p-6 text-center">
 			<p class="text-lg font-medium text-green-800">YouTubeへの投稿が完了しました（限定公開）</p>
 			{#if youtubeUrl}
@@ -324,16 +348,78 @@
 						success = false;
 						youtubeUrl = '';
 						videoFile = null;
+						selectedTheme = 'none';
+						step = 'theme';
 					}}
 				>
 					続けて撮影
 				</a>
 			</div>
 		</div>
-	{:else if !videoFile}
-		<!-- 撮影画面 -->
+	{:else if step === 'theme'}
+		<!-- Step 1: テーマ選択 -->
+		<h1 class="mb-1 text-lg font-bold text-gray-900">加工テーマを選択</h1>
+		<p class="mb-4 text-sm text-gray-500">撮影前にテーマを選ぶと、目標の撮影時間がわかります</p>
+
 		{#if error}
 			<div class="mb-4 rounded bg-red-50 p-3 text-sm text-red-600">{error}</div>
+		{/if}
+
+		<div class="space-y-3">
+			{#each themes as theme}
+				<button
+					type="button"
+					onclick={() => {
+						selectedTheme = theme.id;
+					}}
+					class="w-full rounded-xl border-2 p-4 text-left transition-colors {selectedTheme ===
+					theme.id
+						? 'border-blue-500 bg-blue-50'
+						: 'border-gray-200 active:border-gray-300'}"
+				>
+					<div class="flex items-center justify-between">
+						<p class="font-medium">{theme.label}</p>
+						{#if theme.mediaDuration}
+							<span class="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-700">
+								{formatDuration(theme.mediaDuration)}
+							</span>
+						{/if}
+					</div>
+					<p class="mt-0.5 text-sm text-gray-500">{theme.description}</p>
+					{#if theme.mediaDuration}
+						<p class="mt-1 text-xs text-blue-600">
+							撮影目安: {formatDuration(theme.mediaDuration)}
+						</p>
+					{/if}
+				</button>
+			{/each}
+		</div>
+
+		<button
+			type="button"
+			onclick={goToRecord}
+			class="mt-6 w-full rounded-lg bg-blue-600 px-4 py-3.5 text-base font-medium text-white shadow active:bg-blue-700"
+		>
+			撮影へ進む
+		</button>
+	{:else if step === 'record'}
+		<!-- Step 2: 撮影画面 -->
+		{#if error}
+			<div class="mb-4 rounded bg-red-50 p-3 text-sm text-red-600">{error}</div>
+		{/if}
+
+		<!-- 選択中のテーマ表示 -->
+		{#if selectedThemeData && selectedTheme !== 'none'}
+			<div class="mb-3 flex items-center justify-between rounded-lg bg-blue-50 px-4 py-2.5">
+				<span class="text-sm font-medium text-blue-800">
+					テーマ: {selectedThemeData.label}
+				</span>
+				{#if targetDuration}
+					<span class="text-sm font-medium text-blue-600">
+						目標 {formatDuration(targetDuration)}
+					</span>
+				{/if}
+			</div>
 		{/if}
 
 		<div class="relative overflow-hidden rounded-2xl bg-black">
@@ -356,9 +442,35 @@
 				<div class="absolute left-1/2 top-4 -translate-x-1/2">
 					<div class="flex items-center gap-2 rounded-full bg-black/60 px-4 py-1.5">
 						<span class="h-2.5 w-2.5 animate-pulse rounded-full bg-red-500"></span>
-						<span class="font-mono text-sm font-semibold text-white"
-							>REC {formatTime(recordingTime)}</span
-						>
+						{#if targetDuration}
+							<span
+								class="font-mono text-sm font-semibold {recordingTime > targetDuration
+									? 'text-yellow-400'
+									: recordingTime >= targetDuration - 3 && targetDuration > 3
+										? 'text-green-400'
+										: 'text-white'}"
+							>
+								{formatTime(recordingTime)} / {formatTime(targetDuration)}
+							</span>
+						{:else}
+							<span class="font-mono text-sm font-semibold text-white">
+								REC {formatTime(recordingTime)}
+							</span>
+						{/if}
+					</div>
+				</div>
+			{/if}
+
+			<!-- 目標時間プログレスバー（録画中・目標時間あり） -->
+			{#if isRecording && targetDuration}
+				<div class="absolute bottom-20 left-4 right-4">
+					<div class="h-1 overflow-hidden rounded-full bg-white/30">
+						<div
+							class="h-full rounded-full transition-all duration-1000 {recordingTime > targetDuration
+								? 'bg-yellow-400'
+								: 'bg-green-400'}"
+							style="width: {Math.min((recordingTime / targetDuration) * 100, 100)}%"
+						></div>
 					</div>
 				</div>
 			{/if}
@@ -427,8 +539,19 @@
 				<div class="h-12 w-12"></div>
 			</div>
 		</div>
-	{:else}
-		<!-- 録画完了後: プレビュー＋投稿フォーム -->
+
+		<!-- テーマ選択に戻る -->
+		{#if !isRecording}
+			<button
+				type="button"
+				onclick={goToTheme}
+				class="mt-4 w-full text-center text-sm text-gray-500 active:text-gray-700"
+			>
+				← テーマ選択に戻る
+			</button>
+		{/if}
+	{:else if step === 'form'}
+		<!-- Step 3: 録画完了後 フォーム入力 -->
 		<form
 			onsubmit={(e) => {
 				e.preventDefault();
@@ -450,6 +573,19 @@
 				></video>
 			</div>
 
+			<!-- 選択テーマ＋録画情報 -->
+			<div class="flex items-center justify-between rounded-lg bg-gray-50 px-4 py-2.5">
+				<span class="text-sm text-gray-600">
+					テーマ: <span class="font-medium">{selectedThemeData?.label || 'なし'}</span>
+				</span>
+				<span class="text-sm text-gray-500">
+					録画時間: {formatTime(recordingTime)}
+					{#if targetDuration}
+						/ {formatTime(targetDuration)}
+					{/if}
+				</span>
+			</div>
+
 			<!-- 撮り直すボタン -->
 			<button
 				type="button"
@@ -458,33 +594,6 @@
 			>
 				撮り直す
 			</button>
-
-			<!-- 加工テーマ選択 -->
-			<div class="rounded-lg border border-gray-200 p-4">
-				<h2 class="mb-3 text-base font-semibold">加工テーマ</h2>
-				<div class="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
-					{#each themes as theme}
-						<button
-							type="button"
-							onclick={() => {
-								selectedTheme = theme.id;
-							}}
-							class="rounded-lg border-2 p-3 text-left transition-colors {selectedTheme ===
-							theme.id
-								? 'border-blue-500 bg-blue-50'
-								: 'border-gray-200 active:border-gray-300'}"
-						>
-							<div class="flex items-center justify-between">
-								<p class="text-sm font-medium">{theme.label}</p>
-								{#if theme.mediaDuration}
-									<span class="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">{formatDuration(theme.mediaDuration)}</span>
-								{/if}
-							</div>
-							<p class="text-xs text-gray-500">{theme.description}</p>
-						</button>
-					{/each}
-				</div>
-			</div>
 
 			<div>
 				<label for="group" class="block text-sm font-medium text-gray-700">団体</label>
