@@ -26,22 +26,71 @@
 	let youtubeUrl = $state('');
 	let selectedTheme = $state('none');
 
+	let videoElement;
+	let recorder;
+	let chunks = [];
+	let isRecording = $state(false);
+	let stream;
+
 	onMount(async () => {
 		if (!$user) return;
 		const userData = await getUser($user.uid);
 		if (userData?.groupIds?.length) {
 			groups = await getGroupsByIds(userData.groupIds);
 		}
+
+		try {
+			stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+			if (videoElement) {
+				videoElement.srcObject = stream;
+			}
+		} catch (e) {
+			error = 'カメラ・マイクへのアクセスが許可されませんでした: ' + e.message;
+		}
 	});
 
-	function handleFileChange(e) {
-		const file = e.target.files?.[0];
-		if (file) videoFile = file;
+	async function startRecording() {
+		chunks = [];
+
+		stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+		if (videoElement) {
+			videoElement.srcObject = stream;
+		}
+
+		const mimeType = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
+		recorder = new MediaRecorder(stream, { mimeType });
+
+		recorder.ondataavailable = (e) => chunks.push(e.data);
+
+		recorder.onstop = () => {
+			const ext = mimeType.split('/')[1];
+			const blob = new Blob(chunks, { type: mimeType });
+			const file = new File([blob], `recorded_${Date.now()}.${ext}`, { type: mimeType });
+
+			if (videoElement) {
+				videoElement.srcObject = null;
+				videoElement.src = URL.createObjectURL(blob);
+				videoElement.controls = true;
+			}
+
+			videoFile = file;
+		};
+
+		recorder.start(100);
+		isRecording = true;
+	}
+
+	function stopRecording() {
+		if (recorder && isRecording) {
+			recorder.stop();
+			stream.getTracks().forEach((track) => track.stop());
+			isRecording = false;
+		}
 	}
 
 	async function handleSubmit() {
 		if (!videoFile || !selectedGroupId || !title) {
-			error = '動画ファイル、団体、タイトルは必須です';
+			error = '録画した動画、団体、タイトルは必須です';
 			return;
 		}
 
@@ -134,7 +183,7 @@
 </script>
 
 <div class="mx-auto max-w-2xl p-6">
-	<h1 class="mb-6 text-2xl font-bold text-gray-900">ファイルを選択してアップロード</h1>
+	<h1 class="mb-6 text-2xl font-bold text-gray-900">カメラで撮影</h1>
 
 	{#if success}
 		<div class="rounded-lg bg-green-50 p-6 text-center">
@@ -152,7 +201,7 @@
 			<div class="mt-4 flex justify-center gap-4">
 				<a href="/status" class="text-blue-600 underline">投稿ステータス一覧</a>
 				<a
-					href="/upload"
+					href="/record"
 					class="text-blue-600 underline"
 					onclick={() => {
 						success = false;
@@ -160,7 +209,7 @@
 						videoFile = null;
 					}}
 				>
-					続けてアップロード
+					続けて撮影
 				</a>
 			</div>
 		</div>
@@ -176,18 +225,32 @@
 				<div class="rounded bg-red-50 p-3 text-sm text-red-600">{error}</div>
 			{/if}
 
-			<!-- ファイル選択 -->
-			<div>
-				<label for="video" class="block text-sm font-medium text-gray-700"
-					>動画ファイルを選択</label
-				>
-				<input
-					id="video"
-					type="file"
-					accept="video/*"
-					onchange={handleFileChange}
-					class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:rounded file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100"
-				/>
+			<!-- カメラ録画 -->
+			<div class="rounded-lg border border-gray-200 p-4">
+				<video
+					bind:this={videoElement}
+					autoplay
+					muted
+					class="mb-4 w-full rounded border"
+				></video>
+				<div class="flex space-x-2">
+					<button
+						type="button"
+						onclick={startRecording}
+						disabled={isRecording}
+						class="rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700 disabled:opacity-50"
+					>
+						{isRecording ? '録画中...' : '録画開始'}
+					</button>
+					<button
+						type="button"
+						onclick={stopRecording}
+						disabled={!isRecording}
+						class="rounded bg-gray-600 px-4 py-2 text-white hover:bg-gray-700 disabled:opacity-50"
+					>
+						録画停止
+					</button>
+				</div>
 			</div>
 
 			<!-- 加工テーマ選択 -->

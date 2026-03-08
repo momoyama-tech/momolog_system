@@ -46,13 +46,27 @@
 		{/if}
 	</section>
 
+	<section class="mb-8">
+		<h2 class="mb-4 text-lg font-semibold text-gray-700">動画を投稿</h2>
+		<div class="grid grid-cols-2 gap-4">
+			<a
+				href="/record"
+				class="flex flex-col items-center rounded-lg bg-blue-600 px-6 py-4 text-white shadow hover:bg-blue-700"
+			>
+				<span class="text-2xl">📷</span>
+				<span class="mt-1 font-semibold">カメラで撮影</span>
+			</a>
+			<a
+				href="/upload"
+				class="flex flex-col items-center rounded-lg border border-gray-300 bg-white px-6 py-4 text-gray-700 shadow-sm hover:bg-gray-50"
+			>
+				<span class="text-2xl">📁</span>
+				<span class="mt-1 font-semibold">ファイルを選択</span>
+			</a>
+		</div>
+	</section>
+
 	<div class="flex flex-wrap gap-4">
-		<a
-			href="/upload"
-			class="rounded-lg bg-blue-600 px-6 py-3 text-white shadow hover:bg-blue-700"
-		>
-			動画をアップロード
-		</a>
 		<a
 			href="/status"
 			class="rounded-lg border border-gray-300 bg-white px-6 py-3 text-gray-700 shadow-sm hover:bg-gray-50"
