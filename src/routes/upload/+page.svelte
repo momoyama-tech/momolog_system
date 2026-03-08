@@ -3,6 +3,9 @@
 	import { getUser, getGroupsByIds, createVideo, getThemes } from '$lib/firebase/firestore.js';
 	import { uploadVideo } from '$lib/firebase/storage.js';
 	import { onMount } from 'svelte';
+	import { env } from '$env/dynamic/public';
+
+	const PROCESSOR_URL = env.PUBLIC_PROCESSOR_URL || '';
 
 	let themes = $state([{ id: 'none', label: 'なし', description: 'そのまま投稿', type: 'none' }]);
 	let groups = $state([]);
@@ -73,30 +76,38 @@
 			let finalStoragePath = storagePath;
 			let finalStorageUrl = downloadUrl;
 
-			if (selectedTheme !== 'none') {
+			if (selectedTheme !== 'none' && PROCESSOR_URL) {
 				uploadPhase = 'processing';
 				progress = 0;
 
 				const themeData = themes.find((t) => t.id === selectedTheme);
-				const processResponse = await fetch('/api/process', {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({
-						storagePath,
-						theme: themeData.type,
-						mediaStoragePath: themeData.mediaStoragePath,
-						userId: $user.uid
-					})
-				});
+				const controller = new AbortController();
+				const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000);
 
-				const processResult = await processResponse.json();
+				try {
+					const processResponse = await fetch(`${PROCESSOR_URL}/process`, {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({
+							storagePath,
+							theme: themeData.type,
+							mediaStoragePath: themeData.mediaStoragePath,
+							userId: $user.uid
+						}),
+						signal: controller.signal
+					});
 
-				if (!processResponse.ok) {
-					throw new Error(processResult.error || '動画の加工に失敗しました');
+					const processResult = await processResponse.json();
+
+					if (!processResponse.ok) {
+						throw new Error(processResult.error || '動画の加工に失敗しました');
+					}
+
+					finalStoragePath = processResult.processedStoragePath;
+					finalStorageUrl = processResult.processedStorageUrl;
+				} finally {
+					clearTimeout(timeoutId);
 				}
-
-				finalStoragePath = processResult.processedStoragePath;
-				finalStorageUrl = processResult.processedStorageUrl;
 			}
 
 			const videoId = await createVideo({
