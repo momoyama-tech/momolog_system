@@ -4,6 +4,13 @@
 	import { uploadVideo } from '$lib/firebase/storage.js';
 	import { onMount } from 'svelte';
 
+	const PROCESSOR_URL = import.meta.env.PUBLIC_PROCESSOR_URL || '';
+
+	const THEMES = [
+		{ id: 'none', label: 'なし', description: 'そのまま投稿' },
+		{ id: 'bgm', label: 'BGM追加', description: 'BGMを自動で追加' }
+	];
+
 	let groups = $state([]);
 	let selectedGroupId = $state('');
 	let title = $state('');
@@ -12,10 +19,11 @@
 	let videoFile = $state(null);
 	let uploading = $state(false);
 	let progress = $state(0);
-	let uploadPhase = $state(''); // 'storage' | 'youtube'
+	let uploadPhase = $state(''); // 'storage' | 'processing' | 'youtube'
 	let error = $state('');
 	let success = $state(false);
 	let youtubeUrl = $state('');
+	let selectedTheme = $state('none');
 
 	// 録画関連
 	let videoElement;
@@ -48,7 +56,6 @@
 	}
 
 	async function startRecording() {
-		// ① 毎回撮影開始時にchunksをリセット（これだけで上書きになる）
 		chunks = [];
 
 		stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
@@ -73,7 +80,7 @@
 				videoElement.controls = true;
 			}
 
-			uploadToFirebase(file);
+			videoFile = file;
 		};
 
 		recorder.start(100);
@@ -83,20 +90,9 @@
 	function stopRecording() {
 		if (recorder && isRecording) {
 			recorder.stop();
-			stream.getTracks().forEach(track => track.stop()); // カメラを解放
+			stream.getTracks().forEach((track) => track.stop());
 			isRecording = false;
 		}
-	}
-
-	// Firebase Storageへアップロード
-	async function uploadToFirebase(file) {
-		const storageRef = `videos/${$user.uid}/${file.name}`;
-		const downloadUrl = await uploadVideo(file, storageRef, (p) => {
-			progress = p;
-		});
-		console.log('アップロード完了:', downloadUrl);
-		// → YouTube APIへ渡す（ここではvideoFileにセット）
-		videoFile = file;
 	}
 
 	async function handleSubmit() {
@@ -124,7 +120,35 @@
 				progress = p;
 			});
 
-			// 2. Firestoreに動画ドキュメント作成（団体名をdenormalize）
+			// 2. テーマがBGMの場合、Cloud Runで加工
+			let finalStoragePath = storagePath;
+			let finalStorageUrl = downloadUrl;
+
+			if (selectedTheme === 'bgm' && PROCESSOR_URL) {
+				uploadPhase = 'processing';
+				progress = 0;
+
+				const processResponse = await fetch(`${PROCESSOR_URL}/process`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						storagePath,
+						theme: 'bgm',
+						userId: $user.uid
+					})
+				});
+
+				const processResult = await processResponse.json();
+
+				if (!processResponse.ok) {
+					throw new Error(processResult.error || '動画の加工に失敗しました');
+				}
+
+				finalStoragePath = processResult.processedStoragePath;
+				finalStorageUrl = processResult.processedStorageUrl;
+			}
+
+			// 3. Firestoreに動画ドキュメント作成
 			const videoId = await createVideo({
 				groupId: selectedGroupId,
 				groupName: selectedGroup.name,
@@ -136,13 +160,14 @@
 					.map((t) => t.trim())
 					.filter(Boolean),
 				status: 'pending',
-				storagePath,
-				storageUrl: downloadUrl,
+				storagePath: finalStoragePath,
+				storageUrl: finalStorageUrl,
 				youtubeUrl: '',
-				youtubeThumbnailUrl: ''
+				youtubeThumbnailUrl: '',
+				processingTheme: selectedTheme
 			});
 
-			// 3. YouTube投稿APIを呼び出し
+			// 4. YouTube投稿APIを呼び出し
 			uploadPhase = 'youtube';
 			progress = 0;
 
@@ -187,13 +212,26 @@
 			{/if}
 			<div class="mt-4 flex justify-center gap-4">
 				<a href="/status" class="text-blue-600 underline">投稿ステータス一覧</a>
-				<a href="/upload" class="text-blue-600 underline" onclick={() => { success = false; youtubeUrl = ''; }}>
+				<a
+					href="/upload"
+					class="text-blue-600 underline"
+					onclick={() => {
+						success = false;
+						youtubeUrl = '';
+					}}
+				>
 					続けてアップロード
 				</a>
 			</div>
 		</div>
 	{:else}
-		<form onsubmit={(e) => { e.preventDefault(); handleSubmit(); }} class="space-y-6">
+		<form
+			onsubmit={(e) => {
+				e.preventDefault();
+				handleSubmit();
+			}}
+			class="space-y-6"
+		>
 			{#if error}
 				<div class="rounded bg-red-50 p-3 text-sm text-red-600">{error}</div>
 			{/if}
@@ -231,7 +269,9 @@
 			<div class="text-center text-gray-500">または</div>
 
 			<div>
-				<label for="video" class="block text-sm font-medium text-gray-700">動画ファイルを選択</label>
+				<label for="video" class="block text-sm font-medium text-gray-700"
+					>動画ファイルを選択</label
+				>
 				<input
 					id="video"
 					type="file"
@@ -240,6 +280,30 @@
 					class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:rounded file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100"
 				/>
 			</div>
+
+			<!-- 加工テーマ選択 -->
+			{#if videoFile}
+				<div class="rounded-lg border border-gray-200 p-4">
+					<h2 class="mb-3 text-lg font-semibold">加工テーマ</h2>
+					<div class="grid grid-cols-2 gap-3">
+						{#each THEMES as theme}
+							<button
+								type="button"
+								onclick={() => {
+									selectedTheme = theme.id;
+								}}
+								class="rounded-lg border-2 p-3 text-left transition-colors {selectedTheme ===
+								theme.id
+									? 'border-blue-500 bg-blue-50'
+									: 'border-gray-200 hover:border-gray-300'}"
+							>
+								<p class="font-medium">{theme.label}</p>
+								<p class="text-xs text-gray-500">{theme.description}</p>
+							</button>
+						{/each}
+					</div>
+				</div>
+			{/if}
 
 			<div>
 				<label for="group" class="block text-sm font-medium text-gray-700">団体</label>
@@ -292,14 +356,26 @@
 				<div class="space-y-2">
 					{#if uploadPhase === 'storage'}
 						<div class="h-2 w-full rounded-full bg-gray-200">
-							<div class="h-2 rounded-full bg-blue-600 transition-all" style="width: {progress}%"></div>
+							<div
+								class="h-2 rounded-full bg-blue-600 transition-all"
+								style="width: {progress}%"
+							></div>
 						</div>
 						<p class="text-sm text-gray-500">
 							Storageにアップロード中... {Math.round(progress)}%
 						</p>
+					{:else if uploadPhase === 'processing'}
+						<div class="flex items-center gap-2">
+							<div
+								class="h-5 w-5 animate-spin rounded-full border-2 border-purple-600 border-t-transparent"
+							></div>
+							<p class="text-sm text-gray-500">動画を加工中...（しばらくお待ちください）</p>
+						</div>
 					{:else if uploadPhase === 'youtube'}
 						<div class="flex items-center gap-2">
-							<div class="h-5 w-5 animate-spin rounded-full border-2 border-red-600 border-t-transparent"></div>
+							<div
+								class="h-5 w-5 animate-spin rounded-full border-2 border-red-600 border-t-transparent"
+							></div>
 							<p class="text-sm text-gray-500">YouTubeに投稿中...（しばらくお待ちください）</p>
 						</div>
 					{/if}
@@ -312,7 +388,11 @@
 				class="w-full rounded-lg bg-blue-600 px-4 py-3 text-white shadow hover:bg-blue-700 disabled:opacity-50"
 			>
 				{#if uploading}
-					{uploadPhase === 'storage' ? 'Storageにアップロード中...' : 'YouTubeに投稿中...'}
+					{uploadPhase === 'storage'
+						? 'Storageにアップロード中...'
+						: uploadPhase === 'processing'
+							? '動画を加工中...'
+							: 'YouTubeに投稿中...'}
 				{:else}
 					アップロード
 				{/if}
