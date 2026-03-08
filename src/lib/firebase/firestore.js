@@ -88,3 +88,11 @@ export async function getVideosByGroup(groupId) {
 export async function updateVideo(videoId, data) {
 	return updateDoc(doc(db, 'videos', videoId), data);
 }
+
+// --- Themes ---
+
+export async function getThemes() {
+	const q = query(collection(db, 'themes'), where('active', '==', true));
+	const snap = await getDocs(q);
+	return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}

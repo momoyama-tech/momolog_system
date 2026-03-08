@@ -1,17 +1,13 @@
 <script>
 	import { user } from '$lib/stores/auth.js';
-	import { getUser, getGroupsByIds, createVideo } from '$lib/firebase/firestore.js';
+	import { getUser, getGroupsByIds, createVideo, getThemes } from '$lib/firebase/firestore.js';
 	import { uploadVideo } from '$lib/firebase/storage.js';
 	import { onMount } from 'svelte';
 	import { PUBLIC_PROCESSOR_URL } from '$env/static/public';
 
 	const PROCESSOR_URL = PUBLIC_PROCESSOR_URL || '';
 
-	const THEMES = [
-		{ id: 'none', label: 'なし', description: 'そのまま投稿' },
-		{ id: 'bgm', label: 'BGM追加', description: 'BGMを自動で追加' }
-	];
-
+	let themes = $state([{ id: 'none', label: 'なし', description: 'そのまま投稿', type: 'none' }]);
 	let groups = $state([]);
 	let selectedGroupId = $state('');
 	let title = $state('');
@@ -31,6 +27,21 @@
 		const userData = await getUser($user.uid);
 		if (userData?.groupIds?.length) {
 			groups = await getGroupsByIds(userData.groupIds);
+		}
+		try {
+			const dbThemes = await getThemes();
+			themes = [
+				{ id: 'none', label: 'なし', description: 'そのまま投稿', type: 'none' },
+				...dbThemes.map((t) => ({
+					id: t.id,
+					label: t.name,
+					description: t.description,
+					type: t.type,
+					mediaStoragePath: t.mediaStoragePath
+				}))
+			];
+		} catch (e) {
+			console.warn('Failed to load themes:', e);
 		}
 	});
 
@@ -65,16 +76,18 @@
 			let finalStoragePath = storagePath;
 			let finalStorageUrl = downloadUrl;
 
-			if (selectedTheme === 'bgm' && PROCESSOR_URL) {
+			if (selectedTheme !== 'none' && PROCESSOR_URL) {
 				uploadPhase = 'processing';
 				progress = 0;
 
+				const themeData = themes.find((t) => t.id === selectedTheme);
 				const processResponse = await fetch(`${PROCESSOR_URL}/process`, {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({
 						storagePath,
-						theme: 'bgm',
+						theme: themeData.type,
+						mediaStoragePath: themeData.mediaStoragePath,
 						userId: $user.uid
 					})
 				});
@@ -195,7 +208,7 @@
 				<div class="rounded-lg border border-gray-200 p-4">
 					<h2 class="mb-3 text-lg font-semibold">加工テーマ</h2>
 					<div class="grid grid-cols-2 gap-3">
-						{#each THEMES as theme}
+						{#each themes as theme}
 							<button
 								type="button"
 								onclick={() => {
