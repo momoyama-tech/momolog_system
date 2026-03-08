@@ -83,7 +83,7 @@ export async function POST({ request }) {
 					tags: video.tags || []
 				},
 				status: {
-					privacyStatus: 'private'
+					privacyStatus: 'unlisted'
 				}
 			},
 			media: {

@@ -27,6 +27,9 @@
 	let chunks = [];
 	let isRecording = $state(false);
 	let stream;
+	let facingMode = $state('user');
+	let recordingTime = $state(0);
+	let recordingTimer;
 
 	onMount(async () => {
 		if (!$user) return;
@@ -51,7 +54,10 @@
 		}
 
 		try {
-			stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+			stream = await navigator.mediaDevices.getUserMedia({
+				video: { facingMode },
+				audio: true
+			});
 			if (videoElement) {
 				videoElement.srcObject = stream;
 			}
@@ -60,10 +66,39 @@
 		}
 	});
 
+	async function switchCamera() {
+		if (isRecording) return;
+		facingMode = facingMode === 'user' ? 'environment' : 'user';
+		try {
+			if (stream) stream.getTracks().forEach((t) => t.stop());
+			stream = await navigator.mediaDevices.getUserMedia({
+				video: { facingMode },
+				audio: true
+			});
+			if (videoElement) {
+				videoElement.srcObject = stream;
+			}
+		} catch (e) {
+			error = 'カメラの切り替えに失敗しました: ' + e.message;
+		}
+	}
+
+	function formatTime(seconds) {
+		const m = Math.floor(seconds / 60)
+			.toString()
+			.padStart(2, '0');
+		const s = (seconds % 60).toString().padStart(2, '0');
+		return `${m}:${s}`;
+	}
+
 	async function startRecording() {
 		chunks = [];
+		recordingTime = 0;
 
-		stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+		stream = await navigator.mediaDevices.getUserMedia({
+			video: { facingMode },
+			audio: true
+		});
 		if (videoElement) {
 			videoElement.srcObject = stream;
 		}
@@ -74,6 +109,7 @@
 		recorder.ondataavailable = (e) => chunks.push(e.data);
 
 		recorder.onstop = () => {
+			clearInterval(recordingTimer);
 			const ext = mimeType.split('/')[1];
 			const blob = new Blob(chunks, { type: mimeType });
 			const file = new File([blob], `recorded_${Date.now()}.${ext}`, { type: mimeType });
@@ -89,6 +125,9 @@
 
 		recorder.start(100);
 		isRecording = true;
+		recordingTimer = setInterval(() => {
+			recordingTime += 1;
+		}, 1000);
 	}
 
 	function stopRecording() {
@@ -96,7 +135,26 @@
 			recorder.stop();
 			stream.getTracks().forEach((track) => track.stop());
 			isRecording = false;
+			clearInterval(recordingTimer);
 		}
+	}
+
+	function retakeVideo() {
+		videoFile = null;
+		if (videoElement) {
+			videoElement.src = '';
+			videoElement.controls = false;
+		}
+		recordingTime = 0;
+		navigator.mediaDevices
+			.getUserMedia({ video: { facingMode }, audio: true })
+			.then((s) => {
+				stream = s;
+				if (videoElement) videoElement.srcObject = stream;
+			})
+			.catch((e) => {
+				error = 'カメラの再起動に失敗しました: ' + e.message;
+			});
 	}
 
 	async function handleSubmit() {
@@ -195,12 +253,10 @@
 	}
 </script>
 
-<div class="mx-auto max-w-2xl p-6">
-	<h1 class="mb-6 text-2xl font-bold text-gray-900">カメラで撮影</h1>
-
+<div class="mx-auto max-w-2xl p-4 sm:p-6">
 	{#if success}
 		<div class="rounded-lg bg-green-50 p-6 text-center">
-			<p class="text-lg font-medium text-green-800">YouTubeへの投稿が完了しました（非公開）</p>
+			<p class="text-lg font-medium text-green-800">YouTubeへの投稿が完了しました（限定公開）</p>
 			{#if youtubeUrl}
 				<a
 					href={youtubeUrl}
@@ -226,76 +282,156 @@
 				</a>
 			</div>
 		</div>
+	{:else if !videoFile}
+		<!-- 撮影画面 -->
+		<div class="space-y-4">
+			{#if error}
+				<div class="rounded bg-red-50 p-3 text-sm text-red-600">{error}</div>
+			{/if}
+
+			<!-- カメラプレビュー -->
+			<div class="relative overflow-hidden rounded-2xl bg-black">
+				<video
+					bind:this={videoElement}
+					autoplay
+					muted
+					playsinline
+					class="aspect-video w-full object-cover {isRecording
+						? 'ring-4 ring-red-500 ring-inset rounded-2xl'
+						: ''}"
+				></video>
+
+				<!-- カメラ切り替えボタン（プレビュー右上） -->
+				{#if !isRecording}
+					<button
+						type="button"
+						onclick={switchCamera}
+						class="absolute right-3 top-3 rounded-full bg-black/50 p-2.5 text-white active:bg-black/70"
+					>
+						<svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+							></path>
+						</svg>
+					</button>
+				{/if}
+			</div>
+
+			<!-- 録画タイマー -->
+			{#if isRecording}
+				<div class="flex items-center justify-center gap-2">
+					<span class="h-3 w-3 animate-pulse rounded-full bg-red-500"></span>
+					<span class="font-mono text-lg font-semibold text-red-600"
+						>REC {formatTime(recordingTime)}</span
+					>
+				</div>
+			{/if}
+
+			<!-- 録画コントロール -->
+			<div class="flex items-center justify-center gap-8 py-4">
+				<!-- カメラ切り替え -->
+				<button
+					type="button"
+					onclick={switchCamera}
+					disabled={isRecording}
+					class="flex h-12 w-12 items-center justify-center rounded-full bg-gray-200 text-gray-700 active:bg-gray-300 disabled:opacity-30"
+				>
+					<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+						></path>
+					</svg>
+				</button>
+
+				<!-- 録画ボタン -->
+				{#if isRecording}
+					<button
+						type="button"
+						onclick={stopRecording}
+						class="flex h-20 w-20 items-center justify-center rounded-full border-4 border-white bg-red-100 shadow-lg active:scale-95"
+					>
+						<span class="h-8 w-8 rounded-sm bg-red-600"></span>
+					</button>
+				{:else}
+					<button
+						type="button"
+						onclick={startRecording}
+						class="flex h-20 w-20 items-center justify-center rounded-full border-4 border-white bg-red-100 shadow-lg active:scale-95"
+					>
+						<span class="h-14 w-14 rounded-full bg-red-600"></span>
+					</button>
+				{/if}
+
+				<!-- スペーサー -->
+				<div class="h-12 w-12"></div>
+			</div>
+		</div>
 	{:else}
+		<!-- 録画完了後: プレビュー＋投稿フォーム -->
 		<form
 			onsubmit={(e) => {
 				e.preventDefault();
 				handleSubmit();
 			}}
-			class="space-y-6"
+			class="space-y-5"
 		>
 			{#if error}
 				<div class="rounded bg-red-50 p-3 text-sm text-red-600">{error}</div>
 			{/if}
 
-			<!-- カメラ録画 -->
-			<div class="rounded-lg border border-gray-200 p-4">
+			<!-- 録画プレビュー -->
+			<div class="overflow-hidden rounded-2xl bg-black">
 				<video
 					bind:this={videoElement}
-					autoplay
-					muted
-					class="mb-4 w-full rounded border"
+					class="aspect-video w-full object-cover"
+					controls
+					playsinline
 				></video>
-				<div class="flex space-x-2">
-					<button
-						type="button"
-						onclick={startRecording}
-						disabled={isRecording}
-						class="rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700 disabled:opacity-50"
-					>
-						{isRecording ? '録画中...' : '録画開始'}
-					</button>
-					<button
-						type="button"
-						onclick={stopRecording}
-						disabled={!isRecording}
-						class="rounded bg-gray-600 px-4 py-2 text-white hover:bg-gray-700 disabled:opacity-50"
-					>
-						録画停止
-					</button>
-				</div>
 			</div>
 
+			<!-- 撮り直すボタン -->
+			<button
+				type="button"
+				onclick={retakeVideo}
+				class="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 active:bg-gray-100"
+			>
+				撮り直す
+			</button>
+
 			<!-- 加工テーマ選択 -->
-			{#if videoFile}
-				<div class="rounded-lg border border-gray-200 p-4">
-					<h2 class="mb-3 text-lg font-semibold">加工テーマ</h2>
-					<div class="grid grid-cols-2 gap-3">
-						{#each themes as theme}
-							<button
-								type="button"
-								onclick={() => {
-									selectedTheme = theme.id;
-								}}
-								class="rounded-lg border-2 p-3 text-left transition-colors {selectedTheme ===
-								theme.id
-									? 'border-blue-500 bg-blue-50'
-									: 'border-gray-200 hover:border-gray-300'}"
-							>
-								<p class="font-medium">{theme.label}</p>
-								<p class="text-xs text-gray-500">{theme.description}</p>
-							</button>
-						{/each}
-					</div>
+			<div class="rounded-lg border border-gray-200 p-4">
+				<h2 class="mb-3 text-base font-semibold">加工テーマ</h2>
+				<div class="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
+					{#each themes as theme}
+						<button
+							type="button"
+							onclick={() => {
+								selectedTheme = theme.id;
+							}}
+							class="rounded-lg border-2 p-3 text-left transition-colors {selectedTheme ===
+							theme.id
+								? 'border-blue-500 bg-blue-50'
+								: 'border-gray-200 active:border-gray-300'}"
+						>
+							<p class="text-sm font-medium">{theme.label}</p>
+							<p class="text-xs text-gray-500">{theme.description}</p>
+						</button>
+					{/each}
 				</div>
-			{/if}
+			</div>
 
 			<div>
 				<label for="group" class="block text-sm font-medium text-gray-700">団体</label>
 				<select
 					id="group"
 					bind:value={selectedGroupId}
-					class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
+					class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2.5 text-base"
 				>
 					<option value="">選択してください</option>
 					{#each groups as group}
@@ -310,7 +446,7 @@
 					id="title"
 					type="text"
 					bind:value={title}
-					class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
+					class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2.5 text-base"
 				/>
 			</div>
 
@@ -320,7 +456,7 @@
 					id="desc"
 					bind:value={description}
 					rows="3"
-					class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
+					class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2.5 text-base"
 				></textarea>
 			</div>
 
@@ -333,7 +469,7 @@
 					type="text"
 					bind:value={tags}
 					placeholder="タグ1, タグ2, タグ3"
-					class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
+					class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2.5 text-base"
 				/>
 			</div>
 
@@ -370,7 +506,7 @@
 			<button
 				type="submit"
 				disabled={uploading || !videoFile}
-				class="w-full rounded-lg bg-blue-600 px-4 py-3 text-white shadow hover:bg-blue-700 disabled:opacity-50"
+				class="w-full rounded-lg bg-blue-600 px-4 py-3.5 text-base font-medium text-white shadow active:bg-blue-700 disabled:opacity-50"
 			>
 				{#if uploading}
 					{uploadPhase === 'storage'

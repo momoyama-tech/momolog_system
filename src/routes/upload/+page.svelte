@@ -151,7 +151,7 @@
 
 	{#if success}
 		<div class="rounded-lg bg-green-50 p-6 text-center">
-			<p class="text-lg font-medium text-green-800">YouTubeへの投稿が完了しました（非公開）</p>
+			<p class="text-lg font-medium text-green-800">YouTubeへの投稿が完了しました（限定公開）</p>
 			{#if youtubeUrl}
 				<a
 					href={youtubeUrl}
