@@ -3,9 +3,9 @@
 	import { getUser, getGroupsByIds, createVideo, getThemes } from '$lib/firebase/firestore.js';
 	import { uploadVideo } from '$lib/firebase/storage.js';
 	import { onMount } from 'svelte';
-	import { PUBLIC_PROCESSOR_URL } from '$env/static/public';
+	import { env } from '$env/dynamic/public';
 
-	const PROCESSOR_URL = PUBLIC_PROCESSOR_URL || '';
+	const PROCESSOR_URL = env.PUBLIC_PROCESSOR_URL || '';
 
 	let themes = $state([{ id: 'none', label: 'なし', description: 'そのまま投稿', type: 'none' }]);
 	let groups = $state([]);
@@ -22,7 +22,7 @@
 	let youtubeUrl = $state('');
 	let selectedTheme = $state('none');
 
-	let videoElement;
+	let videoElement = $state();
 	let recorder;
 	let chunks = [];
 	let isRecording = $state(false);
@@ -354,6 +354,7 @@
 					<button
 						type="button"
 						onclick={stopRecording}
+						aria-label="録画停止"
 						class="flex h-20 w-20 items-center justify-center rounded-full border-4 border-white bg-red-100 shadow-lg active:scale-95"
 					>
 						<span class="h-8 w-8 rounded-sm bg-red-600"></span>
@@ -362,6 +363,7 @@
 					<button
 						type="button"
 						onclick={startRecording}
+						aria-label="録画開始"
 						class="flex h-20 w-20 items-center justify-center rounded-full border-4 border-white bg-red-100 shadow-lg active:scale-95"
 					>
 						<span class="h-14 w-14 rounded-full bg-red-600"></span>

@@ -3,9 +3,9 @@
 	import { getUser, getGroupsByIds, createVideo, getThemes } from '$lib/firebase/firestore.js';
 	import { uploadVideo } from '$lib/firebase/storage.js';
 	import { onMount } from 'svelte';
-	import { PUBLIC_PROCESSOR_URL } from '$env/static/public';
+	import { env } from '$env/dynamic/public';
 
-	const PROCESSOR_URL = PUBLIC_PROCESSOR_URL || '';
+	const PROCESSOR_URL = env.PUBLIC_PROCESSOR_URL || '';
 
 	let themes = $state([{ id: 'none', label: 'なし', description: 'そのまま投稿', type: 'none' }]);
 	let groups = $state([]);
