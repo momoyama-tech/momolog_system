@@ -7,7 +7,7 @@
 
 	const PROCESSOR_URL = env.PUBLIC_PROCESSOR_URL || '';
 
-	let themes = $state([{ id: 'none', label: 'なし', description: 'そのまま投稿', type: 'none' }]);
+	let themes = $state([{ id: 'none', label: 'なし', description: 'そのまま投稿', type: 'none', mediaDuration: 0 }]);
 	let groups = $state([]);
 	let selectedGroupId = $state('');
 	let title = $state('');
@@ -40,13 +40,14 @@
 		try {
 			const dbThemes = await getThemes();
 			themes = [
-				{ id: 'none', label: 'なし', description: 'そのまま投稿', type: 'none' },
+				{ id: 'none', label: 'なし', description: 'そのまま投稿', type: 'none', mediaDuration: 0 },
 				...dbThemes.map((t) => ({
 					id: t.id,
 					label: t.name,
 					description: t.description,
 					type: t.type,
-					mediaStoragePath: t.mediaStoragePath
+					mediaStoragePath: t.mediaStoragePath,
+					mediaDuration: t.mediaDuration || 0
 				}))
 			];
 		} catch (e) {
@@ -89,6 +90,13 @@
 			.padStart(2, '0');
 		const s = (seconds % 60).toString().padStart(2, '0');
 		return `${m}:${s}`;
+	}
+
+	function formatDuration(seconds) {
+		if (!seconds) return '';
+		const m = Math.floor(seconds / 60);
+		const s = seconds % 60;
+		return m > 0 ? `${m}:${s.toString().padStart(2, '0')}` : `0:${s.toString().padStart(2, '0')}`;
 	}
 
 	async function startRecording() {
@@ -426,7 +434,12 @@
 								? 'border-blue-500 bg-blue-50'
 								: 'border-gray-200 active:border-gray-300'}"
 						>
-							<p class="text-sm font-medium">{theme.label}</p>
+							<div class="flex items-center justify-between">
+								<p class="text-sm font-medium">{theme.label}</p>
+								{#if theme.mediaDuration}
+									<span class="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">{formatDuration(theme.mediaDuration)}</span>
+								{/if}
+							</div>
 							<p class="text-xs text-gray-500">{theme.description}</p>
 						</button>
 					{/each}
