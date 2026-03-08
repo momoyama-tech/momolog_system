@@ -165,6 +165,34 @@
 			});
 	}
 
+	async function readStreamAsNDJSON(response) {
+		const reader = response.body.getReader();
+		const decoder = new TextDecoder();
+		let buffer = '';
+		let lastResult = null;
+
+		while (true) {
+			const { done, value } = await reader.read();
+			if (done) break;
+			buffer += decoder.decode(value, { stream: true });
+			const lines = buffer.split('\n');
+			buffer = lines.pop();
+			for (const line of lines) {
+				const trimmed = line.trim();
+				if (!trimmed) continue;
+				try {
+					lastResult = JSON.parse(trimmed);
+				} catch {}
+			}
+		}
+		if (buffer.trim()) {
+			try {
+				lastResult = JSON.parse(buffer.trim());
+			} catch {}
+		}
+		return lastResult;
+	}
+
 	async function handleSubmit() {
 		if (!videoFile || !selectedGroupId || !title) {
 			error = '録画した動画、団体、タイトルは必須です';
@@ -212,13 +240,14 @@
 						signal: controller.signal
 					});
 
-					const text = await processResponse.text();
-					const lines = text.trim().split('\n').filter(Boolean);
-					const lastLine = lines[lines.length - 1];
-					const processResult = JSON.parse(lastLine);
+					if (!processResponse.ok) {
+						throw new Error('動画加工サーバーへの接続に失敗しました');
+					}
 
-					if (processResult.status === 'error' || processResult.error) {
-						throw new Error(processResult.error || '動画の加工に失敗しました');
+					const processResult = await readStreamAsNDJSON(processResponse);
+
+					if (!processResult || processResult.status === 'error' || processResult.error) {
+						throw new Error(processResult?.error || '動画の加工に失敗しました');
 					}
 
 					finalStoragePath = processResult.processedStoragePath;
