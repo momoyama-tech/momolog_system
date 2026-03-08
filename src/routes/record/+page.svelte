@@ -34,8 +34,14 @@
 	let recordingTime = $state(0);
 	let recordingTimer;
 
-	let selectedThemeData = $derived(themes.find((t) => t.id === selectedTheme));
-	let targetDuration = $derived(selectedThemeData?.mediaDuration || 0);
+	let targetDuration = $derived.by(() => {
+		const theme = themes.find((t) => t.id === selectedTheme);
+		return theme?.mediaDuration || 0;
+	});
+	let selectedThemeLabel = $derived.by(() => {
+		const theme = themes.find((t) => t.id === selectedTheme);
+		return theme?.label || 'なし';
+	});
 
 	onMount(async () => {
 		if (!$user) return;
@@ -77,7 +83,6 @@
 
 	function goToRecord() {
 		step = 'record';
-		// カメラ初期化は videoElement が mount された後に行う
 		setTimeout(() => initCamera(), 100);
 	}
 
@@ -408,20 +413,6 @@
 			<div class="mb-4 rounded bg-red-50 p-3 text-sm text-red-600">{error}</div>
 		{/if}
 
-		<!-- 選択中のテーマ表示 -->
-		{#if selectedThemeData && selectedTheme !== 'none'}
-			<div class="mb-3 flex items-center justify-between rounded-lg bg-blue-50 px-4 py-2.5">
-				<span class="text-sm font-medium text-blue-800">
-					テーマ: {selectedThemeData.label}
-				</span>
-				{#if targetDuration}
-					<span class="text-sm font-medium text-blue-600">
-						目標 {formatDuration(targetDuration)}
-					</span>
-				{/if}
-			</div>
-		{/if}
-
 		<div class="relative overflow-hidden rounded-2xl bg-black">
 			<!-- カメラプレビュー -->
 			<video
@@ -437,12 +428,28 @@
 				<div class="pointer-events-none absolute inset-0 rounded-2xl ring-4 ring-inset ring-red-500"></div>
 			{/if}
 
-			<!-- 録画タイマー（上部中央オーバーレイ） -->
+			<!-- 撮影前: テーマ名＋目標時間（上部オーバーレイ） -->
+			{#if !isRecording && selectedTheme !== 'none'}
+				<div class="absolute left-0 right-0 top-0 bg-gradient-to-b from-black/60 to-transparent px-4 pb-8 pt-3">
+					<div class="flex items-center justify-between">
+						<span class="rounded-full bg-white/20 px-3 py-1 text-xs font-medium text-white backdrop-blur-sm">
+							{selectedThemeLabel}
+						</span>
+						{#if targetDuration}
+							<span class="rounded-full bg-blue-500/80 px-3 py-1 text-sm font-bold text-white backdrop-blur-sm">
+								目標 {formatTime(targetDuration)}
+							</span>
+						{/if}
+					</div>
+				</div>
+			{/if}
+
+			<!-- 録画中: タイマー（上部中央オーバーレイ） -->
 			{#if isRecording}
 				<div class="absolute left-1/2 top-4 -translate-x-1/2">
-					<div class="flex items-center gap-2 rounded-full bg-black/60 px-4 py-1.5">
+					<div class="flex items-center gap-2 rounded-full bg-black/60 px-4 py-1.5 backdrop-blur-sm">
 						<span class="h-2.5 w-2.5 animate-pulse rounded-full bg-red-500"></span>
-						{#if targetDuration}
+						{#if targetDuration > 0}
 							<span
 								class="font-mono text-sm font-semibold {recordingTime > targetDuration
 									? 'text-yellow-400'
@@ -461,8 +468,8 @@
 				</div>
 			{/if}
 
-			<!-- 目標時間プログレスバー（録画中・目標時間あり） -->
-			{#if isRecording && targetDuration}
+			<!-- 録画中: 目標時間プログレスバー -->
+			{#if isRecording && targetDuration > 0}
 				<div class="absolute bottom-20 left-4 right-4">
 					<div class="h-1 overflow-hidden rounded-full bg-white/30">
 						<div
@@ -576,11 +583,11 @@
 			<!-- 選択テーマ＋録画情報 -->
 			<div class="flex items-center justify-between rounded-lg bg-gray-50 px-4 py-2.5">
 				<span class="text-sm text-gray-600">
-					テーマ: <span class="font-medium">{selectedThemeData?.label || 'なし'}</span>
+					テーマ: <span class="font-medium">{selectedThemeLabel}</span>
 				</span>
 				<span class="text-sm text-gray-500">
 					録画時間: {formatTime(recordingTime)}
-					{#if targetDuration}
+					{#if targetDuration > 0}
 						/ {formatTime(targetDuration)}
 					{/if}
 				</span>
