@@ -212,9 +212,12 @@
 						signal: controller.signal
 					});
 
-					const processResult = await processResponse.json();
+					const text = await processResponse.text();
+					const lines = text.trim().split('\n').filter(Boolean);
+					const lastLine = lines[lines.length - 1];
+					const processResult = JSON.parse(lastLine);
 
-					if (!processResponse.ok) {
+					if (processResult.status === 'error' || processResult.error) {
 						throw new Error(processResult.error || '動画の加工に失敗しました');
 					}
 
