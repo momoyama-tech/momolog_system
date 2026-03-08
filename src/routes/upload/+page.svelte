@@ -3,9 +3,6 @@
 	import { getUser, getGroupsByIds, createVideo, getThemes } from '$lib/firebase/firestore.js';
 	import { uploadVideo } from '$lib/firebase/storage.js';
 	import { onMount } from 'svelte';
-	import { env } from '$env/dynamic/public';
-
-	const PROCESSOR_URL = env.PUBLIC_PROCESSOR_URL || '';
 
 	let themes = $state([{ id: 'none', label: 'なし', description: 'そのまま投稿', type: 'none' }]);
 	let groups = $state([]);
@@ -76,12 +73,12 @@
 			let finalStoragePath = storagePath;
 			let finalStorageUrl = downloadUrl;
 
-			if (selectedTheme !== 'none' && PROCESSOR_URL) {
+			if (selectedTheme !== 'none') {
 				uploadPhase = 'processing';
 				progress = 0;
 
 				const themeData = themes.find((t) => t.id === selectedTheme);
-				const processResponse = await fetch(`${PROCESSOR_URL}/process`, {
+				const processResponse = await fetch('/api/process', {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({
