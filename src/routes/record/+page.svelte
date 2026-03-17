@@ -59,7 +59,8 @@
 					description: t.description,
 					type: t.type,
 					mediaStoragePath: t.mediaStoragePath,
-					mediaDuration: t.mediaDuration || 0
+					mediaDuration: t.mediaDuration || 0,
+					originalAudioVolume: t.originalAudioVolume ?? 1.0
 				}))
 			];
 		} catch (e) {
@@ -263,7 +264,9 @@
 							storagePath,
 							theme: themeData.type,
 							mediaStoragePath: themeData.mediaStoragePath,
-							userId: $user.uid
+							userId: $user.uid,
+						originalAudioVolume: themeData.originalAudioVolume ?? 1.0,
+						mediaDuration: themeData.mediaDuration || null
 						}),
 						signal: controller.signal
 					});
