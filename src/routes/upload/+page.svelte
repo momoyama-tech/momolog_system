@@ -21,6 +21,7 @@
 	let success = $state(false);
 	let youtubeUrl = $state('');
 	let selectedTheme = $state('none');
+	let processedVideoUrl = $state('');
 
 	onMount(async () => {
 		if (!$user) return;
@@ -78,6 +79,22 @@
 			} catch {}
 		}
 		return lastResult;
+	}
+
+	async function downloadProcessedVideo() {
+		if (!processedVideoUrl) return;
+		try {
+			const res = await fetch(processedVideoUrl);
+			const blob = await res.blob();
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = `${title || 'video'}_processed.mp4`;
+			a.click();
+			URL.revokeObjectURL(url);
+		} catch (e) {
+			window.open(processedVideoUrl, '_blank');
+		}
 	}
 
 	async function handleSubmit() {
@@ -141,6 +158,7 @@
 
 					finalStoragePath = processResult.processedStoragePath;
 					finalStorageUrl = processResult.processedStorageUrl;
+					processedVideoUrl = finalStorageUrl;
 				} finally {
 					clearTimeout(timeoutId);
 				}
@@ -206,8 +224,13 @@
 					YouTubeで確認する
 				</a>
 			{/if}
-			<div class="mt-4 flex justify-center gap-4">
+			<div class="mt-4 flex flex-wrap justify-center gap-4">
 				<a href="/status" class="text-blue-600 underline">投稿ステータス一覧</a>
+				{#if processedVideoUrl}
+					<button onclick={downloadProcessedVideo} class="text-blue-600 underline">
+						加工済み動画をダウンロード
+					</button>
+				{/if}
 				<a
 					href="/upload"
 					class="text-blue-600 underline"
@@ -215,6 +238,7 @@
 						success = false;
 						youtubeUrl = '';
 						videoFile = null;
+						processedVideoUrl = '';
 					}}
 				>
 					続けてアップロード
@@ -231,6 +255,11 @@
 		>
 			{#if error}
 				<div class="rounded bg-red-50 p-3 text-sm text-red-600">{error}</div>
+				{#if processedVideoUrl}
+					<button onclick={downloadProcessedVideo} class="mt-1 text-sm text-blue-600 underline">
+						加工済み動画をダウンロード
+					</button>
+				{/if}
 			{/if}
 
 			<!-- ファイル選択 -->
