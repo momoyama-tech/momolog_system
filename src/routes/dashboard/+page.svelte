@@ -66,6 +66,20 @@
 		</div>
 	</section>
 
+	<section class="mb-8">
+		<h2 class="mb-4 text-lg font-semibold text-gray-700">動画加工</h2>
+		<a
+			href="/process"
+			class="flex items-center gap-3 rounded-lg border border-purple-200 bg-purple-50 px-6 py-4 text-purple-700 shadow-sm hover:bg-purple-100"
+		>
+			<span class="text-2xl">🎬</span>
+			<div>
+				<span class="font-semibold">加工してダウンロード</span>
+				<p class="text-xs text-purple-500">テーマを適用してローカルに保存（YouTube投稿なし）</p>
+			</div>
+		</a>
+	</section>
+
 	<div class="flex flex-wrap gap-4">
 		<a
 			href="/status"
