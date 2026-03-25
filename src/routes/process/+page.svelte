@@ -2,6 +2,8 @@
 	import { user } from '$lib/stores/auth.js';
 	import { getThemes } from '$lib/firebase/firestore.js';
 	import { uploadVideo } from '$lib/firebase/storage.js';
+	import { ref, getDownloadURL } from 'firebase/storage';
+	import { storage } from '$lib/firebase/config.js';
 	import { onMount } from 'svelte';
 	import { env } from '$env/dynamic/public';
 
@@ -76,10 +78,19 @@
 		return lastResult;
 	}
 
+	async function getHttpUrl(url) {
+		if (url.startsWith('gs://')) {
+			const path = url.replace(/^gs:\/\/[^/]+\//, '');
+			return await getDownloadURL(ref(storage, path));
+		}
+		return url;
+	}
+
 	async function downloadProcessedVideo() {
 		if (!processedVideoUrl) return;
 		try {
-			const res = await fetch(processedVideoUrl);
+			const httpUrl = await getHttpUrl(processedVideoUrl);
+			const res = await fetch(httpUrl);
 			const blob = await res.blob();
 			const url = URL.createObjectURL(blob);
 			const a = document.createElement('a');
@@ -88,7 +99,12 @@
 			a.click();
 			URL.revokeObjectURL(url);
 		} catch (e) {
-			window.open(processedVideoUrl, '_blank');
+			try {
+				const httpUrl = await getHttpUrl(processedVideoUrl);
+				window.open(httpUrl, '_blank');
+			} catch {
+				alert('ダウンロードに失敗しました');
+			}
 		}
 	}
 
